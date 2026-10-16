@@ -1,5 +1,5 @@
-// Jekardah Chat untuk macOS — membungkus https://chat.jekardah.com dalam jendela aplikasi sendiri.
-const { app, BrowserWindow, Menu, shell, session, systemPreferences, nativeTheme, ipcMain } = require('electron');
+// Jekardah Chat untuk macOS & Windows — membungkus https://chat.jekardah.com dalam jendela aplikasi sendiri.
+const { app, BrowserWindow, Menu, Tray, nativeImage, shell, session, systemPreferences, nativeTheme, ipcMain } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -9,8 +9,15 @@ const GOOGLE_HOSTS = ['accounts.google.com', 'accounts.youtube.com', 'ssl.gstati
 const SNAPSHOT = process.env.JEKARDAH_SNAPSHOT; // khusus pengujian: simpan tangkapan layar lalu keluar
 
 let win = null;
+let tray = null;
 let quitting = false;
 let lastBadge = 0;
+const IS_MAC = process.platform === 'darwin';
+const IS_WIN = process.platform === 'win32';
+const asset = (name) => path.join(__dirname, 'build', name);
+
+// Windows: notifikasi butuh AppUserModelID yang sama dengan shortcut installer (appId)
+if (IS_WIN) app.setAppUserModelId('com.jekardah.chat');
 
 // Google menolak login dari "browser tertanam" yang mengaku Electron, jadi pakai user agent Chrome biasa.
 app.userAgentFallback = app.userAgentFallback
@@ -72,7 +79,9 @@ function createWindow() {
     minHeight: 520,
     title: 'Jekardah Chat',
     show: false,
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#111b21' : '#f0f2f5',
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#12161C' : '#E7F1F9',
+    icon: IS_MAC ? undefined : asset('icon.png'),
+    autoHideMenuBar: IS_WIN, // menu muncul dengan tombol Alt, seperti aplikasi Windows modern
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -87,7 +96,7 @@ function createWindow() {
   win.on('resize', saveBounds);
   win.on('move', saveBounds);
 
-  // Menutup jendela = menyembunyikan (pesan & notifikasi tetap masuk), seperti WhatsApp di Mac
+  // Menutup jendela = menyembunyikan (pesan & notifikasi tetap masuk); Mac: tetap di Dock, Windows: di system tray
   win.on('close', (e) => {
     if (!quitting) {
       e.preventDefault();
@@ -97,15 +106,24 @@ function createWindow() {
 
   const wc = win.webContents;
 
-  // Badge Dock dari judul halaman "(3) Jekardah Chat"
+  // Jumlah chat belum dibaca dari judul halaman "(3) Jekardah Chat":
+  // Mac -> badge di Dock; Windows -> titik di ikon taskbar + judul jendela + tooltip tray
   wc.on('page-title-updated', (e, title) => {
     e.preventDefault();
-    win.setTitle('Jekardah Chat');
     const n = Number((/^\((\d+)\)/.exec(title) || [])[1] || 0);
-    app.dock?.setBadge(n ? String(n) : '');
-    if (n > lastBadge && !win.isFocused()) app.dock?.bounce('informational');
+    if (IS_MAC) {
+      win.setTitle('Jekardah Chat');
+      app.dock?.setBadge(n ? String(n) : '');
+      if (n > lastBadge && !win.isFocused()) app.dock?.bounce('informational');
+    } else {
+      win.setTitle(n ? `(${n}) Jekardah Chat` : 'Jekardah Chat');
+      win.setOverlayIcon(n ? nativeImage.createFromPath(asset('badge.png')) : null, n ? `${n} chat belum dibaca` : '');
+      if (n > lastBadge && !win.isFocused()) win.flashFrame(true);
+      tray?.setToolTip(n ? `Jekardah Chat — ${n} chat belum dibaca` : 'Jekardah Chat');
+    }
     lastBadge = n;
   });
+  win.on('focus', () => win.flashFrame(false));
 
   // Hanya chat.jekardah.com (dan login Google) yang dibuka di dalam aplikasi; link lain ke browser
   wc.on('will-navigate', (e, url) => {
@@ -149,6 +167,19 @@ function createWindow() {
   win.loadURL(APP_URL);
 }
 
+// ---------- Windows: ikon di system tray ----------
+function setupTray() {
+  if (!IS_WIN) return;
+  tray = new Tray(nativeImage.createFromPath(asset('tray.png')).resize({ width: 16, height: 16 }));
+  tray.setToolTip('Jekardah Chat');
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: 'Buka Jekardah Chat', click: showWindow },
+    { type: 'separator' },
+    { label: 'Keluar', click: () => { quitting = true; app.quit(); } },
+  ]));
+  tray.on('click', showWindow);
+}
+
 // ---------- Izin: notifikasi, kamera, salin-tempel hanya untuk chat.jekardah.com ----------
 function setupPermissions() {
   const allowed = new Set(['notifications', 'media', 'clipboard-sanitized-write', 'clipboard-read', 'fullscreen']);
@@ -168,8 +199,8 @@ function setupPermissions() {
 
 // ---------- Menu macOS (penting untuk Cmd+C / Cmd+V / Cmd+Q) ----------
 function setupMenu() {
-  const template = [
-    {
+  const appMenu = IS_MAC
+    ? [{
       label: app.name,
       submenu: [
         { role: 'about', label: 'Tentang Jekardah Chat' },
@@ -180,7 +211,16 @@ function setupMenu() {
         { type: 'separator' },
         { role: 'quit', label: 'Keluar dari Jekardah Chat' },
       ],
-    },
+    }]
+    : [{
+      label: 'Berkas',
+      submenu: [
+        { label: 'Sembunyikan ke tray', accelerator: 'Ctrl+W', click: () => win?.hide() },
+        { label: 'Keluar', accelerator: 'Ctrl+Q', click: () => { quitting = true; app.quit(); } },
+      ],
+    }];
+  const template = [
+    ...appMenu,
     {
       label: 'Edit',
       submenu: [
@@ -222,6 +262,7 @@ function setupMenu() {
       submenu: [
         { label: 'Buka chat.jekardah.com di Browser', click: () => shell.openExternal(APP_URL) },
         { label: 'Halaman Unduhan & Versi Terbaru', click: () => shell.openExternal('https://github.com/romizone/jekardah-chat-desktop/releases/latest') },
+        ...(IS_MAC ? [] : [{ type: 'separator' }, { label: 'Tentang Jekardah Chat', click: () => app.showAboutPanel() }]),
       ],
     },
   ];
@@ -239,6 +280,7 @@ app.setAboutPanelOptions({
 app.whenReady().then(() => {
   setupPermissions();
   setupMenu();
+  setupTray();
   createWindow();
   app.on('activate', showWindow); // klik ikon di Dock
 });

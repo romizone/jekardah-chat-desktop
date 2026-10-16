@@ -6,13 +6,13 @@ const path = require('node:path');
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#3ee07f"/><stop offset="1" stop-color="#00a884"/>
+      <stop offset="0" stop-color="#5B90E6"/><stop offset="1" stop-color="#2556BC"/>
     </linearGradient>
     <linearGradient id="at" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#16c06a"/><stop offset="1" stop-color="#00916f"/>
+      <stop offset="0" stop-color="#467DDB"/><stop offset="1" stop-color="#2556BC"/>
     </linearGradient>
-    <filter id="sh" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="14" stdDeviation="18" flood-color="#003d2e" flood-opacity=".28"/></filter>
-    <filter id="sh2" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#00523d" flood-opacity=".30"/></filter>
+    <filter id="sh" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="14" stdDeviation="18" flood-color="#0f2a63" flood-opacity=".28"/></filter>
+    <filter id="sh2" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#14306b" flood-opacity=".30"/></filter>
   </defs>
   <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#bg)" filter="url(#sh)"/>
   <g transform="translate(512 500) scale(8.6) translate(-32 -32)" filter="url(#sh2)">
@@ -28,7 +28,21 @@ app.whenReady().then(async () => {
   const img = await win.webContents.capturePage({ x: 0, y: 0, width: 1024, height: 1024 });
   const out = path.join(__dirname, '..', 'build', 'icon-1024.png');
   fs.writeFileSync(out, img.resize({ width: 1024, height: 1024 }).toPNG());
+  fs.writeFileSync(path.join(__dirname, '..', 'build', 'icon.png'), img.resize({ width: 1024, height: 1024 }).toPNG());
   fs.writeFileSync(path.join(__dirname, '..', 'build', 'icon.svg'), svg);
   console.log('ikon 1024 px:', out);
+
+  // Ikon tray Windows & penanda "ada pesan belum dibaca" di taskbar
+  const render = async (html, size, file) => {
+    const w = new BrowserWindow({ width: size, height: size, show: false, frame: false, transparent: true, webPreferences: { offscreen: true } });
+    await w.loadURL(`data:text/html,${encodeURIComponent(`<html><body style="margin:0;background:transparent">${html}</body></html>`)}`);
+    await new Promise((r) => setTimeout(r, 300));
+    const shot = await w.webContents.capturePage({ x: 0, y: 0, width: size, height: size });
+    fs.writeFileSync(path.join(__dirname, '..', 'build', file), shot.resize({ width: size, height: size }).toPNG());
+    w.destroy();
+  };
+  await render(svg.replace('width="1024" height="1024"', 'width="64" height="64"'), 64, 'tray.png');
+  await render('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><circle cx="16" cy="16" r="14" fill="#467DDB" stroke="#fff" stroke-width="3"/></svg>', 32, 'badge.png');
+  console.log('tray.png & badge.png siap');
   app.quit();
 });

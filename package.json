@@ -1,7 +1,7 @@
 {
   "name": "jekardah-chat-desktop",
   "productName": "Jekardah Chat",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Aplikasi desktop macOS untuk Jekardah Chat (chat.jekardah.com) \u2014 chat dengan email Gmail, ala WhatsApp.",
   "main": "main.js",
   "author": "Romi Nur Ismanto",
@@ -11,7 +11,8 @@
     "start": "electron .",
     "icon": "electron scripts/make-icon.js && bash scripts/make-icns.sh",
     "dist": "electron-builder --mac dmg --arm64 --x64 --publish never",
-    "release": "bash scripts/release-mac.sh"
+    "release": "bash scripts/release-mac.sh",
+    "dist:win": "electron-builder --win nsis --x64 --publish never"
   },
   "build": {
     "appId": "com.jekardah.chat",
@@ -21,7 +22,10 @@
       "main.js",
       "preload.js",
       "offline.html",
-      "package.json"
+      "package.json",
+      "build/icon.png",
+      "build/tray.png",
+      "build/badge.png"
     ],
     "directories": {
       "output": "dist",
@@ -60,6 +64,28 @@
         "height": 380
       },
       "sign": true
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "executableName": "Jekardah Chat"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Jekardah Chat",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "Jekardah-Chat-Setup-${version}-${arch}.${ext}"
     }
   },
   "devDependencies": {

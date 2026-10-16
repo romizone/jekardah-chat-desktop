@@ -4,6 +4,9 @@ Aplikasi desktop Mac & Windows untuk **[Jekardah Chat](https://chat.jekardah.com
 
 ![Ikon](build/icon-1024.png)
 
+> Pakai di HP? Buka **chat.jekardah.com** lalu pasang ke layar utama (iPhone: Safari → Bagikan → *Tambahkan ke Layar Utama*; Android: Chrome → ⋮ → *Instal aplikasi*).
+> Kode web & server: [romizone/jekardah-chat](https://github.com/romizone/jekardah-chat).
+
 ## Unduh
 
 Buka halaman **[Releases](https://github.com/romizone/jekardah-chat-desktop/releases/latest)** dan pilih:
@@ -57,10 +60,27 @@ npm run release           # build rilis: ditandatangani + dinotarisasi Apple bil
                           # Developer ID & profil notarisasi tersedia, selain itu ad-hoc
 ```
 
-Notarisasi Apple (agar aplikasi langsung terbuka tanpa peringatan) butuh membership Apple Developer aktif:
+Notarisasi Apple (agar aplikasi langsung terbuka tanpa peringatan) butuh membership Apple Developer aktif (Team ID `9AG982M27S`):
 1. Xcode → Settings → Accounts → Manage Certificates → **+** → *Developer ID Application*
-2. `xcrun notarytool store-credentials jekardah-notary --apple-id <email> --team-id <TEAMID>`
-3. `npm run release`
+   (cek: `security find-identity -v -p codesigning` harus menampilkan *Developer ID Application: … (9AG982M27S)*)
+2. `xcrun notarytool store-credentials jekardah-notary --apple-id <email> --team-id 9AG982M27S`
+   (masukkan *app-specific password* dari appleid.apple.com, sampai muncul *Success*)
+3. `npm run release` — otomatis memilih mode notarisasi bila kedua hal di atas tersedia, lalu ganti `.dmg` di rilis:
+   `gh release upload v<versi> <file>.dmg SHA256SUMS.txt --clobber`
+
+Installer Windows: `npm run dist:win` (bisa dibuat dari Mac tanpa Wine). Tanpa sertifikat code-signing Windows,
+SmartScreen menampilkan peringatan sekali (*More info → Run anyway*).
+
+## Status rilis
+
+| Versi | Isi | Tanda tangan |
+|---|---|---|
+| **1.1.0** | Aplikasi Windows (tray, titik taskbar), tema & ikon biru | Mac: ad-hoc (notarisasi menunggu sertifikat Developer ID) · Windows: belum ditandatangani |
+| 1.0.1 | Skrip rilis dengan notarisasi otomatis, izin kamera/mikrofon | ad-hoc |
+| 1.0.0 | Aplikasi Mac pertama | ad-hoc |
+
+Tampilan & fitur chat (tulisan gaya macOS, emoji, stiker, grup, dll.) mengikuti chat.jekardah.com — cukup buka ulang
+aplikasi atau ⌘R / Ctrl+R setelah web diperbarui, tanpa install ulang.
 
 > Bila build gagal dengan *"resource fork, Finder information, or similar detritus not allowed"* (folder tersinkron iCloud), arahkan hasil build ke luar folder tersebut:
 > `npx electron-builder --mac dmg --arm64 --x64 --config.directories.output=/tmp/jekardah-dist`

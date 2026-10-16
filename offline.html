@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+  <title>Jekardah Chat</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      margin: 0; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+      font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; background: #f0f2f5; color: #54656f; text-align: center;
+    }
+    @media (prefers-color-scheme: dark) { body { background: #111b21; color: #aebac1; } h1 { color: #e9edef; } }
+    h1 { margin: 0; font-size: 22px; font-weight: 500; color: #111b21; }
+    p { margin: 0; max-width: 380px; line-height: 1.5; }
+    button { margin-top: 8px; border: 0; border-radius: 20px; padding: 10px 24px; background: #00a884; color: #fff; font-size: 15px; cursor: pointer; }
+    small { opacity: .7; }
+  </style>
+</head>
+<body>
+  <svg width="72" height="72" viewBox="0 0 64 64" aria-hidden="true"><path fill="#25d366" d="M32 4C16.5 4 4 15.9 4 30.6c0 7.6 3.4 14.5 8.9 19.3L10 60l11.3-5.6c3.3 1.1 6.9 1.8 10.7 1.8 15.5 0 28-11.9 28-26.6S47.5 4 32 4z"/><text x="32" y="41" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="30" font-weight="700" fill="#fff">@</text></svg>
+  <h1>Tidak dapat terhubung</h1>
+  <p>Periksa koneksi internet Anda. Jekardah Chat akan mencoba menyambung lagi secara otomatis.</p>
+  <button id="retry">Coba lagi</button>
+  <small id="count"></small>
+  <script>
+    const target = new URLSearchParams(location.search).get('url') || 'https://chat.jekardah.com';
+    const go = () => { location.href = target; };
+    document.getElementById('retry').onclick = go;
+    let n = 10;
+    setInterval(() => {
+      n -= 1;
+      document.getElementById('count').textContent = `Mencoba lagi dalam ${n} detik…`;
+      if (n <= 0 && navigator.onLine) go();
+      if (n <= 0) n = 10;
+    }, 1000);
+  </script>
+</body>
+</html>

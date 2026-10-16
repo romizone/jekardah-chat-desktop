@@ -1,0 +1,66 @@
+{
+  "name": "jekardah-chat-desktop",
+  "productName": "Jekardah Chat",
+  "version": "1.0.0",
+  "description": "Aplikasi desktop macOS untuk Jekardah Chat (chat.jekardah.com) — chat dengan email Gmail, ala WhatsApp.",
+  "main": "main.js",
+  "author": "Romi Nur Ismanto",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "icon": "electron scripts/make-icon.js && bash scripts/make-icns.sh",
+    "dist": "electron-builder --mac dmg --arm64 --x64 --publish never"
+  },
+  "build": {
+    "appId": "com.jekardah.chat",
+    "productName": "Jekardah Chat",
+    "copyright": "© 2026 Jekardah",
+    "files": [
+      "main.js",
+      "preload.js",
+      "offline.html",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "mac": {
+      "category": "public.app-category.social-networking",
+      "icon": "build/icon.icns",
+      "identity": "-",
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "darkModeSupport": true,
+      "extendInfo": {
+        "NSCameraUsageDescription": "Jekardah Chat memakai kamera untuk mengambil foto yang ingin Anda kirim.",
+        "NSMicrophoneUsageDescription": "Jekardah Chat memakai mikrofon saat merekam video."
+      }
+    },
+    "dmg": {
+      "title": "Jekardah Chat ${version}",
+      "artifactName": "Jekardah-Chat-${version}-${arch}.${ext}",
+      "contents": [
+        {
+          "x": 140,
+          "y": 190
+        },
+        {
+          "x": 400,
+          "y": 190,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ],
+      "window": {
+        "width": 540,
+        "height": 380
+      }
+    }
+  },
+  "devDependencies": {
+    "electron": "^44.8.0",
+    "electron-builder": "^26.15.3"
+  }
+}

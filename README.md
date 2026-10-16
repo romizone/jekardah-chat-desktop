@@ -42,7 +42,14 @@ npm install
 npm start                 # jalankan aplikasi
 npm run icon              # buat ulang ikon (build/icon.icns)
 npm run dist              # buat .dmg untuk arm64 & x64 (folder dist/)
+npm run release           # build rilis: ditandatangani + dinotarisasi Apple bila sertifikat
+                          # Developer ID & profil notarisasi tersedia, selain itu ad-hoc
 ```
+
+Notarisasi Apple (agar aplikasi langsung terbuka tanpa peringatan) butuh membership Apple Developer aktif:
+1. Xcode → Settings → Accounts → Manage Certificates → **+** → *Developer ID Application*
+2. `xcrun notarytool store-credentials jekardah-notary --apple-id <email> --team-id <TEAMID>`
+3. `npm run release`
 
 > Bila build gagal dengan *"resource fork, Finder information, or similar detritus not allowed"* (folder tersinkron iCloud), arahkan hasil build ke luar folder tersebut:
 > `npx electron-builder --mac dmg --arm64 --x64 --config.directories.output=/tmp/jekardah-dist`

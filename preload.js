@@ -4,4 +4,5 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('jekardahDesktop', {
   platform: process.platform,
   version: () => ipcRenderer.invoke('jekardah:version'),
+  show: () => ipcRenderer.send('jekardah:show'), // notifikasi diklik → munculkan jendela aplikasi
 });

@@ -44,7 +44,10 @@ Langkah ini hanya perlu sekali.
 - Login dengan akun Google di dalam aplikasi.
 - Selalu versi terbaru: tampilan & fitur mengikuti chat.jekardah.com tanpa perlu install ulang.
 - Hanya satu jendela; link luar dibuka di browser; posisi & ukuran jendela diingat.
-- Kembali tersambung otomatis saat internet terputus.
+- Kembali tersambung otomatis saat internet terputus; tampilan yang crash / macet dimuat ulang otomatis.
+- Pesan & notifikasi tetap masuk seketika walaupun jendela ditutup (berjalan di Dock / tray); klik notifikasi memunculkan jendela.
+- Link di pesan dibuka di browser; PDF di jendela penampil (zoom, cetak, unduh); Word/Excel/ZIP langsung diunduh.
+- Posisi, ukuran, dan status maximize jendela diingat; jendela yang tertinggal di monitor yang sudah dilepas dikembalikan ke layar.
 - **Klik kanan** seperti browser: Salin / Tempel, *Simpan Gambar…* & *Salin Gambar*, buka / salin link. Unduhan memakai
   dialog *Simpan* (default folder Downloads); di Mac folder Downloads di Dock memantul saat selesai.
 - **Pemberitahuan versi baru**: saat dibuka (dan setiap 6 jam) aplikasi memeriksa rilis terbaru di GitHub dan menawarkan
@@ -60,6 +63,8 @@ npm start                 # jalankan aplikasi
 npm run icon              # buat ulang ikon (build/icon.icns)
 npm run dist              # buat .dmg untuk arm64 & x64 (folder dist/)
 npm run dist:win          # buat installer Windows .exe (NSIS, x64) — bisa dari Mac tanpa Wine
+npm run selftest          # uji otomatis 17 alur (link, PDF, unduhan, badge, offline, crash, notifikasi, posisi jendela)
+                          # terhadap server lokal: jalankan dulu `npm run dev` (DEV_LOGIN=1) di folder web
 npm run release           # build rilis: ditandatangani + dinotarisasi Apple bila sertifikat
                           # Developer ID & profil notarisasi tersedia, selain itu ad-hoc
 ```
@@ -79,7 +84,8 @@ SmartScreen menampilkan peringatan sekali (*More info → Run anyway*).
 
 | Versi | Isi | Tanda tangan |
 |---|---|---|
-| **1.2.1** | Menu klik kanan (Salin, Tempel, Simpan Gambar…, Salin Gambar, link), unduhan dengan dialog *Simpan* | Mac: ad-hoc (notarisasi menunggu sertifikat Developer ID) · Windows: belum ditandatangani |
+| **1.3.0** | Audit & perbaikan: realtime tetap jalan saat jendela ditutup, klik notifikasi memunculkan jendela, dokumen non-PDF diunduh tanpa jendela kosong, link di jendela PDF ke browser, jendela di luar layar dikembalikan, ukuran/maximize diingat, tampilan crash dimuat ulang otomatis, saran ejaan | Mac: ad-hoc · Windows: belum ditandatangani |
+| 1.2.1 | Menu klik kanan (Salin, Tempel, Simpan Gambar…, Salin Gambar, link), unduhan dengan dialog *Simpan* | Mac: ad-hoc (notarisasi menunggu sertifikat Developer ID) · Windows: belum ditandatangani |
 | 1.2.0 | Pemberitahuan versi baru otomatis + menu *Periksa Pembaruan…* | Mac: ad-hoc · Windows: belum ditandatangani |
 | 1.1.0 | Aplikasi Windows (tray, titik taskbar), tema & ikon biru | Mac: ad-hoc · Windows: belum ditandatangani |
 | 1.0.1 | Skrip rilis dengan notarisasi otomatis, izin kamera/mikrofon | ad-hoc |

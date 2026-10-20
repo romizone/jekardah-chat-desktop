@@ -1,5 +1,5 @@
 // Jekardah Chat untuk macOS & Windows — membungkus https://chat.jekardah.com dalam jendela aplikasi sendiri.
-const { app, BrowserWindow, Menu, Tray, nativeImage, shell, session, systemPreferences, nativeTheme, ipcMain, dialog, net, clipboard } = require('electron');
+const { app, BrowserWindow, Menu, Tray, nativeImage, shell, session, systemPreferences, nativeTheme, ipcMain, dialog, net, clipboard, screen } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -8,6 +8,9 @@ const APP_ORIGIN = new URL(APP_URL).origin;
 const GOOGLE_HOSTS = ['accounts.google.com', 'accounts.youtube.com', 'ssl.gstatic.com', 'www.gstatic.com'];
 const SNAPSHOT = process.env.JEKARDAH_SNAPSHOT; // khusus pengujian: simpan tangkapan layar lalu keluar
 const UPDATE_PROBE = process.env.JEKARDAH_UPDATE_PROBE; // khusus pengujian: cetak hasil cek pembaruan lalu keluar
+const SELFTEST = process.env.JEKARDAH_SELFTEST; // khusus pengujian otomatis (scripts/selftest.js)
+// Uji otomatis memakai data aplikasi terpisah supaya sesi login asli tidak tersentuh
+if (SELFTEST) app.setPath('userData', path.join(require('node:os').tmpdir(), `jekardah-selftest-${process.pid}`));
 const RELEASES_API = 'https://api.github.com/repos/romizone/jekardah-chat-desktop/releases/latest';
 const RELEASES_PAGE = 'https://github.com/romizone/jekardah-chat-desktop/releases/latest';
 
@@ -28,11 +31,9 @@ app.userAgentFallback = app.userAgentFallback
   .trim();
 
 // Satu aplikasi saja yang berjalan; membuka lagi = memunculkan jendela yang ada.
-if (!app.requestSingleInstanceLock()) {
-  app.quit();
-} else {
-  app.on('second-instance', () => showWindow());
-}
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) app.quit();
+else app.on('second-instance', () => showWindow());
 
 const isAppUrl = (url) => {
   try {
@@ -51,17 +52,52 @@ const isGoogleUrl = (url) => {
 
 // ---------- Posisi & ukuran jendela diingat ----------
 const stateFile = () => path.join(app.getPath('userData'), 'window.json');
-function loadBounds() {
+const DEFAULT_SIZE = { width: 1200, height: 800 };
+
+/**
+ * Pastikan jendela muat & terlihat di layar yang ada sekarang (mis. monitor eksternal sudah dilepas).
+ * Bila kurang dari separuh jendela terlihat, jendela dipindah ke tengah layar utama.
+ */
+function fitBounds(b) {
+  const size = {
+    width: Math.max(760, Number(b.width) || DEFAULT_SIZE.width),
+    height: Math.max(520, Number(b.height) || DEFAULT_SIZE.height),
+  };
+  const hasPos = Number.isFinite(b.x) && Number.isFinite(b.y);
+  const area = (hasPos ? screen.getDisplayMatching({ x: b.x, y: b.y, ...size }) : screen.getPrimaryDisplay()).workArea;
+  size.width = Math.min(size.width, area.width);
+  size.height = Math.min(size.height, area.height);
+  if (hasPos) {
+    const visW = Math.min(b.x + size.width, area.x + area.width) - Math.max(b.x, area.x);
+    const visH = Math.min(b.y + size.height, area.y + area.height) - Math.max(b.y, area.y);
+    if (visW > size.width / 2 && visH > size.height / 2 && b.y >= area.y) return { x: b.x, y: b.y, ...size };
+  }
+  const primary = screen.getPrimaryDisplay().workArea;
+  size.width = Math.min(size.width, primary.width);
+  size.height = Math.min(size.height, primary.height);
+  return {
+    x: Math.round(primary.x + (primary.width - size.width) / 2),
+    y: Math.round(primary.y + (primary.height - size.height) / 2),
+    ...size,
+  };
+}
+
+function loadWindowState() {
   try {
-    return JSON.parse(fs.readFileSync(stateFile(), 'utf8'));
+    const st = JSON.parse(fs.readFileSync(stateFile(), 'utf8'));
+    return { bounds: fitBounds(st), maximized: !!st.maximized };
   } catch {
-    return { width: 1200, height: 800 };
+    return { bounds: fitBounds(DEFAULT_SIZE), maximized: false };
   }
 }
-function saveBounds() {
+
+let saveTimer = null;
+function saveBounds({ now = false } = {}) {
+  clearTimeout(saveTimer);
+  if (!now) { saveTimer = setTimeout(() => saveBounds({ now: true }), 400); return; } // tidak menulis file tiap piksel
   if (!win || win.isDestroyed() || win.isMinimized() || win.isFullScreen()) return;
   try {
-    fs.writeFileSync(stateFile(), JSON.stringify(win.getBounds()));
+    fs.writeFileSync(stateFile(), JSON.stringify({ ...win.getNormalBounds(), maximized: win.isMaximized() }));
   } catch {
     /* abaikan */
   }
@@ -75,7 +111,7 @@ function showWindow() {
 }
 
 function createWindow() {
-  const bounds = loadBounds();
+  const { bounds, maximized } = loadWindowState();
   win = new BrowserWindow({
     ...bounds,
     minWidth: 760,
@@ -90,20 +126,30 @@ function createWindow() {
       contextIsolation: true,
       sandbox: true,
       spellcheck: true,
+      // Jendela ditutup/tersembunyi tetap menerima pesan & notifikasi tanpa ditunda browser
+      backgroundThrottling: false,
     },
   });
 
   win.once('ready-to-show', () => {
-    if (!SNAPSHOT) win.show();
+    if (SNAPSHOT) return;
+    if (maximized) win.maximize();
+    win.show();
   });
-  win.on('resize', saveBounds);
-  win.on('move', saveBounds);
+  for (const ev of ['resize', 'move', 'maximize', 'unmaximize']) win.on(ev, () => saveBounds());
 
   // Menutup jendela = menyembunyikan (pesan & notifikasi tetap masuk); Mac: tetap di Dock, Windows: di system tray
   win.on('close', (e) => {
+    saveBounds({ now: true });
     if (!quitting) {
       e.preventDefault();
-      win.hide();
+      if (win.isFullScreen()) {
+        // Mac: keluar dari layar penuh dulu, kalau tidak jendela hitam tertinggal di Space terpisah
+        win.once('leave-full-screen', () => win.hide());
+        win.setFullScreen(false);
+      } else {
+        win.hide();
+      }
     }
   });
 
@@ -133,6 +179,12 @@ function createWindow() {
   wc.on('context-menu', (e, p) => {
     const items = [];
     const sep = () => { if (items.length && items[items.length - 1].type !== 'separator') items.push({ type: 'separator' }); };
+    if (p.isEditable && p.misspelledWord) {
+      // Saran ejaan seperti di browser
+      for (const word of p.dictionarySuggestions.slice(0, 5)) items.push({ label: word, click: () => wc.replaceMisspelling(word) });
+      if (!p.dictionarySuggestions.length) items.push({ label: 'Tidak ada saran ejaan', enabled: false });
+      items.push({ label: 'Tambahkan ke Kamus', click: () => wc.session.addWordToSpellCheckerDictionary(p.misspelledWord) }, { type: 'separator' });
+    }
     if (p.isEditable) {
       items.push(
         { role: 'cut', label: 'Potong', enabled: p.editFlags.canCut },
@@ -165,32 +217,39 @@ function createWindow() {
     if (items.length) Menu.buildFromTemplate(items).popup({ window: win });
   });
 
-  // Hanya chat.jekardah.com (dan login Google) yang dibuka di dalam aplikasi; link lain ke browser
-  wc.on('will-navigate', (e, url) => {
-    if (isAppUrl(url) || isGoogleUrl(url)) return;
-    e.preventDefault();
-    if (/^(https?|mailto):/i.test(url)) shell.openExternal(url);
-  });
-  wc.setWindowOpenHandler(({ url }) => {
-    if (isGoogleUrl(url)) {
-      // Popup "Login dengan Google"
-      return {
-        action: 'allow',
-        overrideBrowserWindowOptions: { width: 500, height: 680, parent: win, modal: false, autoHideMenuBar: true },
-      };
-    }
-    if (isAppUrl(url) && url.includes('/api/media/')) {
-      // PDF / dokumen dari chat dibuka di jendela aplikasi (butuh sesi login)
-      return { action: 'allow', overrideBrowserWindowOptions: { width: 900, height: 1000, parent: win } };
-    }
-    if (/^(https?|mailto):/i.test(url)) shell.openExternal(url);
-    return { action: 'deny' };
+  guardLinks(wc, { allowGoogle: true });
+  wc.on('did-create-window', (child, { url }) => {
+    // Jendela dokumen (PDF): link di dalamnya juga dibuka di browser
+    if (isAppUrl(url)) guardLinks(child.webContents, { allowGoogle: false });
   });
 
   // Tidak bisa terhubung (offline / server sibuk): tampilkan halaman coba lagi
   wc.on('did-fail-load', (e, code, desc, url, isMainFrame) => {
     if (!isMainFrame || code === -3) return; // -3 = dibatalkan (mis. navigasi baru)
     win.loadFile(path.join(__dirname, 'offline.html'), { query: { url: APP_URL } });
+  });
+
+  // Tampilan crash / macet → dimuat ulang otomatis (maks. 3x per menit, setelah itu halaman coba lagi)
+  let crashes = [];
+  wc.on('render-process-gone', (e, details) => {
+    if (details.reason === 'clean-exit' || quitting) return;
+    crashes = crashes.filter((t) => Date.now() - t < 60_000).concat(Date.now());
+    setTimeout(() => {
+      if (win.isDestroyed()) return;
+      if (crashes.length > 3) win.loadFile(path.join(__dirname, 'offline.html'), { query: { url: APP_URL } });
+      else wc.reload();
+    }, 500);
+  });
+  wc.on('unresponsive', async () => {
+    const { response } = await messageBox({
+      type: 'warning',
+      message: 'Jekardah Chat tidak merespons',
+      detail: 'Muat ulang sekarang? Chat Anda tetap aman di server.',
+      buttons: ['Muat Ulang', 'Tunggu'],
+      defaultId: 0,
+      cancelId: 1,
+    });
+    if (response === 0 && !win.isDestroyed()) wc.reload();
   });
 
   if (SNAPSHOT) {
@@ -205,6 +264,48 @@ function createWindow() {
   }
 
   win.loadURL(APP_URL);
+}
+
+/**
+ * Aturan link: hanya chat.jekardah.com (dan login Google di jendela utama) yang dibuka di dalam aplikasi.
+ * Link lain ke browser; PDF dari chat di jendela penampil; dokumen lain langsung diunduh.
+ */
+function guardLinks(contents, { allowGoogle }) {
+  contents.on('will-navigate', (e, url) => {
+    if (isAppUrl(url) || (allowGoogle && isGoogleUrl(url))) return;
+    e.preventDefault();
+    if (/^(https?|mailto):/i.test(url)) shell.openExternal(url);
+  });
+  contents.setWindowOpenHandler(({ url }) => {
+    if (allowGoogle && isGoogleUrl(url)) {
+      // Popup "Login dengan Google"
+      return { action: 'allow', overrideBrowserWindowOptions: { width: 500, height: 680, autoHideMenuBar: true } };
+    }
+    if (isAppUrl(url) && new URL(url).pathname.startsWith('/api/media/')) {
+      if (isPdfView(url)) {
+        return {
+          action: 'allow',
+          overrideBrowserWindowOptions: {
+            width: 900, height: 1000, autoHideMenuBar: true, backgroundColor: '#525659',
+            webPreferences: { plugins: true, sandbox: true, contextIsolation: true }, // plugins = penampil PDF bawaan
+          },
+        };
+      }
+      contents.downloadURL(downloadUrl(url)); // Word, Excel, ZIP, dll.: unduh tanpa jendela kosong
+      return { action: 'deny' };
+    }
+    if (/^(https?|mailto):/i.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+}
+const isPdfView = (url) => {
+  const u = new URL(url);
+  return u.pathname.toLowerCase().endsWith('.pdf') && !u.searchParams.has('download');
+};
+
+/** Dialog yang menempel di jendela hanya bila jendela terlihat (sheet di jendela tersembunyi tidak pernah muncul). */
+function messageBox(opts) {
+  return win && !win.isDestroyed() && win.isVisible() ? dialog.showMessageBox(win, opts) : dialog.showMessageBox(opts);
 }
 
 /** File chat diunduh dengan nama rapi dari server (?download=1). */
@@ -224,9 +325,11 @@ function setupDownloads() {
       buttonLabel: 'Simpan',
     });
     item.once('done', (ev, state) => {
-      if (state !== 'completed') return;
+      if (state === 'cancelled') return;
+      const toast = (msg) => win?.webContents.executeJavaScript(`window.jekardahToast?.(${JSON.stringify(msg)})`).catch(() => {});
+      if (state === 'interrupted') return toast('Unduhan gagal, coba lagi');
       if (IS_MAC) app.dock?.downloadFinished(item.getSavePath()); // folder Downloads di Dock memantul
-      win?.webContents.executeJavaScript(`window.jekardahToast?.(${JSON.stringify(`Tersimpan: ${path.basename(item.getSavePath())}`)})`).catch(() => {});
+      toast(`Tersimpan: ${path.basename(item.getSavePath())}`);
     });
   });
 }
@@ -257,11 +360,11 @@ async function checkForUpdate({ manual = false } = {}) {
     const { version, url } = await latestRelease();
     const current = app.getVersion();
     if (!isNewer(version, current)) {
-      if (manual) await dialog.showMessageBox(win, { type: 'info', message: 'Jekardah Chat sudah versi terbaru', detail: `Versi ${current}`, buttons: ['OK'] });
+      if (manual) await messageBox({ type: 'info', message: 'Jekardah Chat sudah versi terbaru', detail: `Versi ${current}`, buttons: ['OK'] });
       return;
     }
     if (!manual && skippedVersion === version) return;
-    const { response } = await dialog.showMessageBox(win, {
+    const { response } = await messageBox({
       type: 'info',
       title: 'Versi baru tersedia',
       message: `Jekardah Chat ${version} sudah tersedia`,
@@ -273,7 +376,7 @@ async function checkForUpdate({ manual = false } = {}) {
     if (response === 0) shell.openExternal(url);
     else skippedVersion = version;
   } catch (e) {
-    if (manual) await dialog.showMessageBox(win, { type: 'warning', message: 'Tidak dapat memeriksa pembaruan', detail: 'Periksa koneksi internet lalu coba lagi.', buttons: ['OK'] });
+    if (manual) await messageBox({ type: 'warning', message: 'Tidak dapat memeriksa pembaruan', detail: 'Periksa koneksi internet lalu coba lagi.', buttons: ['OK'] });
   }
 }
 
@@ -385,6 +488,8 @@ function setupMenu() {
 }
 
 ipcMain.handle('jekardah:version', () => app.getVersion());
+// Notifikasi pesan diklik di halaman → munculkan jendela walaupun sedang ditutup ke Dock / tray
+ipcMain.on('jekardah:show', (e) => { if (win && e.sender === win.webContents) showWindow(); });
 
 app.setAboutPanelOptions({
   applicationName: 'Jekardah Chat',
@@ -393,6 +498,7 @@ app.setAboutPanelOptions({
 });
 
 app.whenReady().then(async () => {
+  if (!gotLock) return; // instance kedua: hanya membangunkan instance pertama lalu keluar
   if (UPDATE_PROBE) {
     // Uji: bandingkan versi rilis terbaru di GitHub dengan versi yang dipura-purakan
     const r = await latestRelease().catch((e) => ({ error: e.message }));
@@ -402,6 +508,12 @@ app.whenReady().then(async () => {
   }
   setupPermissions();
   setupDownloads();
+  // Windows: periksa ejaan bahasa Indonesia & Inggris (Mac memakai pemeriksa ejaan sistem)
+  if (!IS_MAC) {
+    const ses = session.defaultSession;
+    const langs = ['id', 'en-US'].filter((l) => ses.availableSpellCheckerLanguages.includes(l));
+    if (langs.length) ses.setSpellCheckerLanguages(langs);
+  }
   setupMenu();
   setupTray();
   createWindow();
@@ -413,9 +525,12 @@ app.whenReady().then(async () => {
 });
 
 app.on('before-quit', () => {
+  saveBounds({ now: true });
   quitting = true;
-  saveBounds();
 });
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
+
+// Uji otomatis (npm run selftest): skrip uji mendapat akses ke jendela utama
+if (SELFTEST) require(SELFTEST)({ app, getWin: () => win, showWindow, checkForUpdate, fitBounds });

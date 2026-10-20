@@ -1,5 +1,5 @@
 // Jekardah Chat untuk macOS & Windows — membungkus https://chat.jekardah.com dalam jendela aplikasi sendiri.
-const { app, BrowserWindow, Menu, Tray, nativeImage, shell, session, systemPreferences, nativeTheme, ipcMain, dialog, net } = require('electron');
+const { app, BrowserWindow, Menu, Tray, nativeImage, shell, session, systemPreferences, nativeTheme, ipcMain, dialog, net, clipboard } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -128,6 +128,43 @@ function createWindow() {
   });
   win.on('focus', () => win.flashFrame(false));
 
+  // Klik kanan: Salin / Tempel, simpan & salin gambar, link (Electron tidak punya menu bawaan).
+  // Klik kanan pada bubble pesan ditangani halaman chat sendiri (menu Balas, Salin, Unduh, reaksi).
+  wc.on('context-menu', (e, p) => {
+    const items = [];
+    const sep = () => { if (items.length && items[items.length - 1].type !== 'separator') items.push({ type: 'separator' }); };
+    if (p.isEditable) {
+      items.push(
+        { role: 'cut', label: 'Potong', enabled: p.editFlags.canCut },
+        { role: 'copy', label: 'Salin', enabled: p.editFlags.canCopy },
+        { role: 'paste', label: 'Tempel', enabled: p.editFlags.canPaste },
+        { type: 'separator' },
+        { role: 'selectAll', label: 'Pilih Semua' },
+      );
+    } else if (p.selectionText.trim()) {
+      items.push({ role: 'copy', label: 'Salin' });
+    }
+    if (p.mediaType === 'image' && p.srcURL && !p.srcURL.startsWith('data:')) {
+      sep();
+      items.push(
+        { label: 'Simpan Gambar…', click: () => wc.downloadURL(downloadUrl(p.srcURL)) },
+        { label: 'Salin Gambar', click: () => wc.copyImageAt(p.x, p.y) },
+      );
+    }
+    if (p.mediaType === 'video' && p.srcURL) {
+      sep();
+      items.push({ label: 'Simpan Video…', click: () => wc.downloadURL(downloadUrl(p.srcURL)) });
+    }
+    if (p.linkURL && /^(https?|mailto):/i.test(p.linkURL)) {
+      sep();
+      items.push(
+        { label: 'Buka Link di Browser', click: () => shell.openExternal(p.linkURL) },
+        { label: 'Salin Alamat Link', click: () => clipboard.writeText(p.linkURL) },
+      );
+    }
+    if (items.length) Menu.buildFromTemplate(items).popup({ window: win });
+  });
+
   // Hanya chat.jekardah.com (dan login Google) yang dibuka di dalam aplikasi; link lain ke browser
   wc.on('will-navigate', (e, url) => {
     if (isAppUrl(url) || isGoogleUrl(url)) return;
@@ -168,6 +205,30 @@ function createWindow() {
   }
 
   win.loadURL(APP_URL);
+}
+
+/** File chat diunduh dengan nama rapi dari server (?download=1). */
+function downloadUrl(src) {
+  const u = new URL(src);
+  u.hash = '';
+  if (isAppUrl(u.href) && u.pathname.startsWith('/api/media/')) u.searchParams.set('download', '1');
+  return u.href;
+}
+
+// ---------- Unduhan: dialog "Simpan" ke folder Downloads ----------
+function setupDownloads() {
+  session.defaultSession.on('will-download', (e, item) => {
+    item.setSaveDialogOptions({
+      title: 'Simpan file',
+      defaultPath: path.join(app.getPath('downloads'), item.getFilename()),
+      buttonLabel: 'Simpan',
+    });
+    item.once('done', (ev, state) => {
+      if (state !== 'completed') return;
+      if (IS_MAC) app.dock?.downloadFinished(item.getSavePath()); // folder Downloads di Dock memantul
+      win?.webContents.executeJavaScript(`window.jekardahToast?.(${JSON.stringify(`Tersimpan: ${path.basename(item.getSavePath())}`)})`).catch(() => {});
+    });
+  });
 }
 
 // ---------- Pemberitahuan versi baru aplikasi desktop ----------
@@ -340,6 +401,7 @@ app.whenReady().then(async () => {
     return;
   }
   setupPermissions();
+  setupDownloads();
   setupMenu();
   setupTray();
   createWindow();

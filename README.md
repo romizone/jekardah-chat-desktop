@@ -45,6 +45,8 @@ Langkah ini hanya perlu sekali.
 - Selalu versi terbaru: tampilan & fitur mengikuti chat.jekardah.com tanpa perlu install ulang.
 - Hanya satu jendela; link luar dibuka di browser; posisi & ukuran jendela diingat.
 - Kembali tersambung otomatis saat internet terputus.
+- **Klik kanan** seperti browser: Salin / Tempel, *Simpan Gambar…* & *Salin Gambar*, buka / salin link. Unduhan memakai
+  dialog *Simpan* (default folder Downloads); di Mac folder Downloads di Dock memantul saat selesai.
 - **Pemberitahuan versi baru**: saat dibuka (dan setiap 6 jam) aplikasi memeriksa rilis terbaru di GitHub dan menawarkan
   unduhan yang sesuai (Mac Apple Silicon / Intel / Windows). Bisa juga lewat menu *Periksa Pembaruan…*.
 - **Windows:** ikon di system tray (menutup jendela = tetap berjalan di tray, keluar lewat menu tray atau Ctrl+Q),
@@ -77,7 +79,8 @@ SmartScreen menampilkan peringatan sekali (*More info → Run anyway*).
 
 | Versi | Isi | Tanda tangan |
 |---|---|---|
-| **1.2.0** | Pemberitahuan versi baru otomatis + menu *Periksa Pembaruan…* | Mac: ad-hoc (notarisasi menunggu sertifikat Developer ID) · Windows: belum ditandatangani |
+| **1.2.1** | Menu klik kanan (Salin, Tempel, Simpan Gambar…, Salin Gambar, link), unduhan dengan dialog *Simpan* | Mac: ad-hoc (notarisasi menunggu sertifikat Developer ID) · Windows: belum ditandatangani |
+| 1.2.0 | Pemberitahuan versi baru otomatis + menu *Periksa Pembaruan…* | Mac: ad-hoc · Windows: belum ditandatangani |
 | 1.1.0 | Aplikasi Windows (tray, titik taskbar), tema & ikon biru | Mac: ad-hoc · Windows: belum ditandatangani |
 | 1.0.1 | Skrip rilis dengan notarisasi otomatis, izin kamera/mikrofon | ad-hoc |
 | 1.0.0 | Aplikasi Mac pertama | ad-hoc |

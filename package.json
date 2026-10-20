@@ -1,7 +1,7 @@
 {
   "name": "jekardah-chat-desktop",
   "productName": "Jekardah Chat",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Aplikasi desktop macOS & Windows untuk Jekardah Chat (chat.jekardah.com) — chat dengan email Gmail, ala WhatsApp.",
   "main": "main.js",
   "author": "Romi Nur Ismanto",

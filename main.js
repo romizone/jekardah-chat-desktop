@@ -1,5 +1,5 @@
 // Jekardah Chat untuk macOS & Windows — membungkus https://chat.jekardah.com dalam jendela aplikasi sendiri.
-const { app, BrowserWindow, Menu, Tray, nativeImage, shell, session, systemPreferences, nativeTheme, ipcMain } = require('electron');
+const { app, BrowserWindow, Menu, Tray, nativeImage, shell, session, systemPreferences, nativeTheme, ipcMain, dialog, net } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -7,6 +7,9 @@ const APP_URL = (process.env.JEKARDAH_URL || 'https://chat.jekardah.com').replac
 const APP_ORIGIN = new URL(APP_URL).origin;
 const GOOGLE_HOSTS = ['accounts.google.com', 'accounts.youtube.com', 'ssl.gstatic.com', 'www.gstatic.com'];
 const SNAPSHOT = process.env.JEKARDAH_SNAPSHOT; // khusus pengujian: simpan tangkapan layar lalu keluar
+const UPDATE_PROBE = process.env.JEKARDAH_UPDATE_PROBE; // khusus pengujian: cetak hasil cek pembaruan lalu keluar
+const RELEASES_API = 'https://api.github.com/repos/romizone/jekardah-chat-desktop/releases/latest';
+const RELEASES_PAGE = 'https://github.com/romizone/jekardah-chat-desktop/releases/latest';
 
 let win = null;
 let tray = null;
@@ -167,6 +170,52 @@ function createWindow() {
   win.loadURL(APP_URL);
 }
 
+// ---------- Pemberitahuan versi baru aplikasi desktop ----------
+// Tampilan & fitur chat selalu terbaru (dimuat dari chat.jekardah.com); yang perlu diunduh ulang hanya
+// pembungkus aplikasinya, mis. perbaikan untuk Mac/Windows. Dicek saat aplikasi dibuka lalu setiap 6 jam.
+const isNewer = (a, b) => {
+  const pa = a.split('.').map(Number);
+  const pb = b.split('.').map(Number);
+  for (let i = 0; i < 3; i++) if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) > (pb[i] || 0);
+  return false;
+};
+let skippedVersion = null;
+
+async function latestRelease() {
+  const res = await net.fetch(RELEASES_API, { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'jekardah-chat-desktop' } });
+  if (!res.ok) throw new Error(`GitHub ${res.status}`);
+  const rel = await res.json();
+  const version = String(rel.tag_name || '').replace(/^v/, '');
+  // File untuk komputer ini: .dmg sesuai chip Mac, atau installer .exe Windows
+  const asset = (rel.assets || []).find((a) => (IS_MAC ? a.name.endsWith(`-${process.arch}.dmg`) : IS_WIN ? a.name.endsWith('.exe') : false));
+  return { version, url: asset?.browser_download_url || rel.html_url || RELEASES_PAGE, notes: String(rel.body || '') };
+}
+
+async function checkForUpdate({ manual = false } = {}) {
+  try {
+    const { version, url } = await latestRelease();
+    const current = app.getVersion();
+    if (!isNewer(version, current)) {
+      if (manual) await dialog.showMessageBox(win, { type: 'info', message: 'Jekardah Chat sudah versi terbaru', detail: `Versi ${current}`, buttons: ['OK'] });
+      return;
+    }
+    if (!manual && skippedVersion === version) return;
+    const { response } = await dialog.showMessageBox(win, {
+      type: 'info',
+      title: 'Versi baru tersedia',
+      message: `Jekardah Chat ${version} sudah tersedia`,
+      detail: `Anda memakai versi ${current}. Unduh lalu pasang versi baru untuk perbaikan terbaru aplikasi desktop.\n\nChat Anda tetap aman — tersimpan di server, bukan di aplikasi.`,
+      buttons: ['Unduh sekarang', 'Nanti'],
+      defaultId: 0,
+      cancelId: 1,
+    });
+    if (response === 0) shell.openExternal(url);
+    else skippedVersion = version;
+  } catch (e) {
+    if (manual) await dialog.showMessageBox(win, { type: 'warning', message: 'Tidak dapat memeriksa pembaruan', detail: 'Periksa koneksi internet lalu coba lagi.', buttons: ['OK'] });
+  }
+}
+
 // ---------- Windows: ikon di system tray ----------
 function setupTray() {
   if (!IS_WIN) return;
@@ -204,6 +253,7 @@ function setupMenu() {
       label: app.name,
       submenu: [
         { role: 'about', label: 'Tentang Jekardah Chat' },
+        { label: 'Periksa Pembaruan…', click: () => checkForUpdate({ manual: true }) },
         { type: 'separator' },
         { role: 'hide', label: 'Sembunyikan Jekardah Chat' },
         { role: 'hideOthers', label: 'Sembunyikan Lainnya' },
@@ -262,7 +312,11 @@ function setupMenu() {
       submenu: [
         { label: 'Buka chat.jekardah.com di Browser', click: () => shell.openExternal(APP_URL) },
         { label: 'Halaman Unduhan & Versi Terbaru', click: () => shell.openExternal('https://github.com/romizone/jekardah-chat-desktop/releases/latest') },
-        ...(IS_MAC ? [] : [{ type: 'separator' }, { label: 'Tentang Jekardah Chat', click: () => app.showAboutPanel() }]),
+        ...(IS_MAC ? [] : [
+          { type: 'separator' },
+          { label: 'Periksa Pembaruan…', click: () => checkForUpdate({ manual: true }) },
+          { label: 'Tentang Jekardah Chat', click: () => app.showAboutPanel() },
+        ]),
       ],
     },
   ];
@@ -277,12 +331,23 @@ app.setAboutPanelOptions({
   copyright: 'Chat dengan email Gmail — chat.jekardah.com',
 });
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  if (UPDATE_PROBE) {
+    // Uji: bandingkan versi rilis terbaru di GitHub dengan versi yang dipura-purakan
+    const r = await latestRelease().catch((e) => ({ error: e.message }));
+    console.log('UPDATE_PROBE', JSON.stringify({ current: UPDATE_PROBE, ...r, newer: r.version ? isNewer(r.version, UPDATE_PROBE) : null }));
+    app.exit(0);
+    return;
+  }
   setupPermissions();
   setupMenu();
   setupTray();
   createWindow();
   app.on('activate', showWindow); // klik ikon di Dock
+  if (!SNAPSHOT) {
+    setTimeout(() => checkForUpdate(), 15_000);
+    setInterval(() => checkForUpdate(), 6 * 3600 * 1000);
+  }
 });
 
 app.on('before-quit', () => {

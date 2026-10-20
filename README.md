@@ -45,6 +45,8 @@ Langkah ini hanya perlu sekali.
 - Selalu versi terbaru: tampilan & fitur mengikuti chat.jekardah.com tanpa perlu install ulang.
 - Hanya satu jendela; link luar dibuka di browser; posisi & ukuran jendela diingat.
 - Kembali tersambung otomatis saat internet terputus.
+- **Pemberitahuan versi baru**: saat dibuka (dan setiap 6 jam) aplikasi memeriksa rilis terbaru di GitHub dan menawarkan
+  unduhan yang sesuai (Mac Apple Silicon / Intel / Windows). Bisa juga lewat menu *Periksa Pembaruan…*.
 - **Windows:** ikon di system tray (menutup jendela = tetap berjalan di tray, keluar lewat menu tray atau Ctrl+Q),
   titik biru di ikon taskbar + taskbar berkedip saat ada chat belum dibaca, notifikasi Windows.
 
@@ -75,7 +77,8 @@ SmartScreen menampilkan peringatan sekali (*More info → Run anyway*).
 
 | Versi | Isi | Tanda tangan |
 |---|---|---|
-| **1.1.0** | Aplikasi Windows (tray, titik taskbar), tema & ikon biru | Mac: ad-hoc (notarisasi menunggu sertifikat Developer ID) · Windows: belum ditandatangani |
+| **1.2.0** | Pemberitahuan versi baru otomatis + menu *Periksa Pembaruan…* | Mac: ad-hoc (notarisasi menunggu sertifikat Developer ID) · Windows: belum ditandatangani |
+| 1.1.0 | Aplikasi Windows (tray, titik taskbar), tema & ikon biru | Mac: ad-hoc · Windows: belum ditandatangani |
 | 1.0.1 | Skrip rilis dengan notarisasi otomatis, izin kamera/mikrofon | ad-hoc |
 | 1.0.0 | Aplikasi Mac pertama | ad-hoc |
 
